@@ -1,0 +1,792 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>デイトレード損益記録</title>
+  <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', 'Hiragino Sans', 'Meiryo', sans-serif;
+      background: #0f1117;
+      color: #e0e0e0;
+      min-height: 100vh;
+    }
+
+    header {
+      background: #1a1d27;
+      border-bottom: 1px solid #2a2d3e;
+      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    header h1 { font-size: 1.1rem; font-weight: 700; color: #fff; }
+
+    .sync-area {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .sync-key-box {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: #0f1117;
+      border: 1px solid #2a2d3e;
+      border-radius: 8px;
+      padding: 5px 10px;
+      font-size: 0.78rem;
+    }
+
+    .sync-key-box .key-label { color: #555; }
+    .sync-key-box .key-val   { font-weight: 800; color: #a78bfa; letter-spacing: 0.1em; }
+
+    .sync-status {
+      font-size: 0.75rem;
+      font-weight: 600;
+      min-width: 70px;
+    }
+
+    .icon-btn {
+      background: none;
+      border: none;
+      color: #666;
+      cursor: pointer;
+      font-size: 0.85rem;
+      padding: 2px 4px;
+      border-radius: 4px;
+      transition: color 0.15s;
+    }
+    .icon-btn:hover { color: #fff; }
+
+    .month-nav {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .month-nav button {
+      background: #2a2d3e;
+      border: none;
+      color: #e0e0e0;
+      width: 30px;
+      height: 30px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 1rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.15s;
+    }
+    .month-nav button:hover { background: #3a3d52; }
+    .month-nav span { font-size: 0.95rem; font-weight: 600; min-width: 110px; text-align: center; }
+
+    .main { max-width: 1100px; margin: 0 auto; padding: 20px 14px; }
+
+    /* ── Summary ── */
+    .summary-card {
+      background: #1a1d27;
+      border: 1px solid #2a2d3e;
+      border-radius: 14px;
+      padding: 20px 28px;
+      display: flex;
+      gap: 36px;
+      align-items: center;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+
+    .chart-wrap { position: relative; width: 160px; height: 160px; flex-shrink: 0; }
+    .chart-center {
+      position: absolute; top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center; pointer-events: none;
+    }
+    .chart-center .pct  { font-size: 1.6rem; font-weight: 800; line-height: 1; }
+    .chart-center .lbl  { font-size: 0.68rem; color: #888; margin-top: 4px; }
+
+    .summary-info { flex: 1; min-width: 280px; }
+    .summary-info h2 { font-size: 0.82rem; color: #888; font-weight: 500; margin-bottom: 6px; }
+    .target-row { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+    .target-input-wrap { display: flex; align-items: center; gap: 6px; }
+    .target-input-wrap input {
+      background: #0f1117;
+      border: 1px solid #3a3d52;
+      color: #fff;
+      border-radius: 8px;
+      padding: 7px 10px;
+      font-size: 1rem;
+      width: 150px;
+      font-weight: 700;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .target-input-wrap input:focus { border-color: #2563eb; }
+    .target-input-wrap span { color: #888; font-size: 0.88rem; }
+
+    .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    .stat-box {
+      background: #0f1117; border: 1px solid #2a2d3e;
+      border-radius: 10px; padding: 10px 14px;
+    }
+    .stat-box .s-label { font-size: 0.7rem; color: #666; margin-bottom: 3px; }
+    .stat-box .s-val   { font-size: 1rem; font-weight: 700; }
+    .profit  { color: #ef4444; }
+    .loss    { color: #22c55e; }
+    .neutral { color: #e0e0e0; }
+
+    /* ── Calendar ── */
+    .calendar-card {
+      background: #1a1d27;
+      border: 1px solid #2a2d3e;
+      border-radius: 14px;
+      overflow: hidden;
+    }
+    .cal-header {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      background: #13151f;
+      border-bottom: 1px solid #2a2d3e;
+    }
+    .cal-header div {
+      text-align: center; padding: 9px 0;
+      font-size: 0.76rem; font-weight: 600; color: #666;
+    }
+    .cal-header div:first-child { color: #ef4444; }
+    .cal-header div:last-child  { color: #60a5fa; }
+
+    .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); }
+    .cal-cell {
+      border-right: 1px solid #2a2d3e;
+      border-bottom: 1px solid #2a2d3e;
+      min-height: 82px;
+      padding: 7px;
+      cursor: pointer;
+      transition: background 0.15s;
+      position: relative;
+    }
+    .cal-cell:nth-child(7n) { border-right: none; }
+    .cal-cell:hover { background: #22253a; }
+    .cal-cell.other-month { opacity: 0.25; pointer-events: none; }
+    .day-num {
+      font-size: 0.8rem; font-weight: 600; color: #aaa;
+      width: 24px; height: 24px;
+      display: flex; align-items: center; justify-content: center;
+      margin-bottom: 3px;
+    }
+    .cal-cell.today .day-num {
+      background: #2563eb; color: #fff; border-radius: 50%;
+    }
+    .cal-cell:nth-child(7n+1) .day-num { color: #ef4444; }
+    .cal-cell:nth-child(7n)   .day-num { color: #60a5fa; }
+    .cal-cell.today:nth-child(7n+1) .day-num,
+    .cal-cell.today:nth-child(7n)   .day-num { color: #fff; }
+    .day-pnl { font-size: 0.86rem; font-weight: 800; margin-top: 1px; }
+    .day-memo-dot {
+      position: absolute; top: 6px; right: 7px;
+      width: 5px; height: 5px;
+      border-radius: 50%; background: #a78bfa;
+    }
+
+    /* ── Modals ── */
+    .overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,0.72);
+      z-index: 100; align-items: center; justify-content: center;
+    }
+    .overlay.open { display: flex; }
+
+    .modal {
+      background: #1a1d27; border: 1px solid #2a2d3e;
+      border-radius: 16px; width: 480px; max-width: 96vw;
+      padding: 26px; animation: fadeUp 0.2s ease;
+    }
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(14px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .modal-header {
+      display: flex; align-items: center;
+      justify-content: space-between; margin-bottom: 18px;
+    }
+    .modal-header h3 { font-size: 0.98rem; font-weight: 700; }
+    .modal-close {
+      background: none; border: none; color: #666;
+      font-size: 1.3rem; cursor: pointer; padding: 0 4px;
+    }
+    .modal-close:hover { color: #fff; }
+
+    .form-group { margin-bottom: 14px; }
+    .form-group label { display: block; font-size: 0.76rem; color: #888; margin-bottom: 5px; font-weight: 500; }
+    .form-group input,
+    .form-group textarea {
+      width: 100%;
+      background: #0f1117; border: 1px solid #3a3d52; color: #fff;
+      border-radius: 8px; padding: 9px 11px;
+      font-size: 0.93rem; outline: none; font-family: inherit;
+      transition: border-color 0.15s; resize: vertical;
+    }
+    .form-group input:focus,
+    .form-group textarea:focus { border-color: #2563eb; }
+    .pnl-row { display: flex; align-items: center; gap: 8px; }
+    .pnl-row input { flex: 1; }
+    .pnl-preview { font-size: 0.98rem; font-weight: 800; min-width: 76px; text-align: right; }
+    .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 18px; }
+
+    .btn { padding: 8px 18px; border-radius: 8px; border: none; font-size: 0.86rem; font-weight: 600; cursor: pointer; transition: opacity 0.15s; }
+    .btn:hover { opacity: 0.82; }
+    .btn-primary { background: #2563eb; color: #fff; }
+    .btn-danger  { background: #7f1d1d; color: #ef4444; }
+    .btn-ghost   { background: #2a2d3e; color: #aaa; }
+
+    /* ── Sync key modal ── */
+    .sync-modal { width: 380px; }
+    .sync-modal .key-display {
+      font-size: 2rem; font-weight: 900; letter-spacing: 0.2em;
+      color: #a78bfa; text-align: center;
+      background: #0f1117; border-radius: 10px;
+      padding: 16px; margin-bottom: 14px;
+    }
+    .sync-modal p { font-size: 0.82rem; color: #888; margin-bottom: 14px; line-height: 1.6; }
+    .or-divider { text-align: center; color: #444; margin: 12px 0; font-size: 0.8rem; }
+
+    /* ── Setup banner ── */
+    .setup-banner {
+      background: #1e1a2e;
+      border: 1px solid #4c1d95;
+      border-radius: 12px;
+      padding: 14px 18px;
+      margin-bottom: 18px;
+      font-size: 0.82rem;
+      line-height: 1.7;
+      color: #c4b5fd;
+    }
+    .setup-banner strong { color: #a78bfa; }
+    .setup-banner code {
+      background: #0f0d1a;
+      border-radius: 4px;
+      padding: 1px 5px;
+      font-size: 0.78rem;
+      color: #e0e0e0;
+    }
+
+    @media (max-width: 600px) {
+      .stats-grid { grid-template-columns: repeat(2, 1fr); }
+      .summary-card { gap: 20px; padding: 16px; }
+      .chart-wrap { width: 130px; height: 130px; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>📈 デイトレード損益記録</h1>
+
+  <div class="sync-area">
+    <span class="sync-status" id="syncStatus">–</span>
+    <div class="sync-key-box">
+      <span class="key-label">同期キー</span>
+      <span class="key-val" id="syncKeyDisplay"></span>
+      <button class="icon-btn" id="copyKeyBtn" title="コピー">📋</button>
+      <button class="icon-btn" id="changeKeyBtn" title="キーを変更">✏️</button>
+    </div>
+    <div class="month-nav">
+      <button id="prevMonth">&#8249;</button>
+      <span id="monthLabel"></span>
+      <button id="nextMonth">&#8250;</button>
+    </div>
+  </div>
+</header>
+
+<div class="main">
+  <!-- Firebase 未設定バナー -->
+  <div class="setup-banner" id="setupBanner" style="display:none">
+    ⚙️ <strong>Firebase 未設定</strong> — データはこのブラウザにのみ保存されています（ローカルモード）。<br>
+    同期を有効にするには <code>index.html</code> の <code>FIREBASE_CONFIG</code> を書き換えてください。
+    詳細は <strong>README.md</strong> を参照。
+  </div>
+
+  <!-- サマリー -->
+  <div class="summary-card">
+    <div class="chart-wrap">
+      <canvas id="goalChart"></canvas>
+      <div class="chart-center">
+        <div class="pct" id="chartPct">0%</div>
+        <div class="lbl">目標達成率</div>
+      </div>
+    </div>
+    <div class="summary-info">
+      <h2>月間実現損益目標</h2>
+      <div class="target-row">
+        <div class="target-input-wrap">
+          <input type="number" id="targetInput" placeholder="100000" step="1000">
+          <span>円</span>
+        </div>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-box"><div class="s-label">月間損益合計</div><div class="s-val" id="totalPnl">¥0</div></div>
+        <div class="stat-box"><div class="s-label">勝日 / 負日</div><div class="s-val" id="winLoss">0 / 0</div></div>
+        <div class="stat-box"><div class="s-label">最大利益日</div><div class="s-val profit" id="bestDay">¥0</div></div>
+        <div class="stat-box"><div class="s-label">最大損失日</div><div class="s-val loss" id="worstDay">¥0</div></div>
+        <div class="stat-box"><div class="s-label">記録済み日数</div><div class="s-val neutral" id="tradeDays">0日</div></div>
+        <div class="stat-box"><div class="s-label">平均損益/日</div><div class="s-val" id="avgPnl">¥0</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- カレンダー -->
+  <div class="calendar-card">
+    <div class="cal-header">
+      <div>日</div><div>月</div><div>火</div><div>水</div>
+      <div>木</div><div>金</div><div>土</div>
+    </div>
+    <div class="cal-grid" id="calGrid"></div>
+  </div>
+</div>
+
+<!-- トレード記録モーダル -->
+<div class="overlay" id="overlay">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="modalTitle">トレード記録</h3>
+      <button class="modal-close" id="modalClose">&times;</button>
+    </div>
+    <div class="form-group">
+      <label>損益（円）&nbsp; プラス = 利益 / マイナス = 損失</label>
+      <div class="pnl-row">
+        <input type="number" id="pnlInput" placeholder="例: 15000 または -8000" step="100">
+        <div class="pnl-preview" id="pnlPreview">¥0</div>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>トレード概要・メモ</label>
+      <textarea id="memoInput" rows="3" placeholder="銘柄、エントリー理由、保有時間など"></textarea>
+    </div>
+    <div class="form-group">
+      <label>反省点・改善点</label>
+      <textarea id="reflectionInput" rows="3" placeholder="うまくいかなかった点、次回改善したいこと"></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-danger" id="deleteBtn">削除</button>
+      <button class="btn btn-ghost" id="cancelBtn">キャンセル</button>
+      <button class="btn btn-primary" id="saveBtn">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 同期キーモーダル -->
+<div class="overlay" id="syncOverlay">
+  <div class="modal sync-modal">
+    <div class="modal-header">
+      <h3>同期キーの管理</h3>
+      <button class="modal-close" id="syncModalClose">&times;</button>
+    </div>
+    <p>このキーを他のデバイスで入力すると、同じデータが共有されます。</p>
+    <div class="key-display" id="syncKeyBig"></div>
+    <button class="btn btn-ghost" style="width:100%;margin-bottom:16px" id="copyKeyBtn2">📋 キーをコピー</button>
+    <div class="or-divider">── または別のキーを入力 ──</div>
+    <div class="form-group" style="margin-top:10px">
+      <label>別デバイスのキーを入力して同期</label>
+      <input type="text" id="newKeyInput" placeholder="例: ABC123" maxlength="12"
+             style="text-transform:uppercase;letter-spacing:0.12em;font-weight:800;">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="syncCancelBtn">キャンセル</button>
+      <button class="btn btn-primary" id="applySyncKey">このキーで同期する</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ══════════════════════════════════════════════════════════════
+  //  ▼ Firebase の設定をここに貼り付けてください
+  //    Firebase Console → プロジェクト設定 → マイアプリ → SDK 設定
+  // ══════════════════════════════════════════════════════════════
+  const FIREBASE_CONFIG = {
+    apiKey:            "AIzaSyD_gZYh0PC6yISAHqXD3UknD5YemJwYVUA",
+    authDomain:        "daytrade-tracker-fb101.firebaseapp.com",
+    projectId:         "daytrade-tracker-fb101",
+    storageBucket:     "daytrade-tracker-fb101.firebasestorage.app",
+    messagingSenderId: "716403849356",
+    appId:             "1:716403849356:web:b0f058af2123d59841a3a9"
+  };
+  // ══════════════════════════════════════════════════════════════
+
+  const FIREBASE_READY = FIREBASE_CONFIG.apiKey !== "REPLACE_WITH_YOUR_API_KEY";
+
+  // ── Sync key ───────────────────────────────────────────────
+  const KEY_STORAGE = 'daytrade_sync_key_v1';
+  let syncKey = localStorage.getItem(KEY_STORAGE);
+  if (!syncKey) {
+    syncKey = Math.random().toString(36).substring(2, 8).toUpperCase();
+    localStorage.setItem(KEY_STORAGE, syncKey);
+  }
+
+  // ── State ──────────────────────────────────────────────────
+  const LS_KEY = 'daytrade_v1';
+  let db = {};
+  let unsubscribe = null;
+
+  // ── Firebase / Firestore ───────────────────────────────────
+  let firestore = null;
+
+  if (FIREBASE_READY) {
+    firebase.initializeApp(FIREBASE_CONFIG);
+    firestore = firebase.firestore();
+  } else {
+    document.getElementById('setupBanner').style.display = '';
+  }
+
+  function docRef() {
+    return firestore.collection('data').doc(syncKey);
+  }
+
+  function setSyncStatus(s) {
+    const el = document.getElementById('syncStatus');
+    const map = {
+      local:       { t: 'ローカル', c: '#666' },
+      connecting:  { t: '接続中…',  c: '#f59e0b' },
+      synced:      { t: '同期済み ✓', c: '#22c55e' },
+      saving:      { t: '保存中…',  c: '#60a5fa' },
+      error:       { t: 'エラー ✕', c: '#ef4444' },
+    };
+    const v = map[s] || map.error;
+    el.textContent = v.t;
+    el.style.color  = v.c;
+  }
+
+  function startSync() {
+    if (!FIREBASE_READY) { setSyncStatus('local'); return; }
+    if (unsubscribe) unsubscribe();
+    setSyncStatus('connecting');
+    unsubscribe = docRef().onSnapshot(
+      snap => {
+        db = snap.exists ? (snap.data().db || {}) : {};
+        setSyncStatus('synced');
+        refresh();
+      },
+      err => { console.error(err); setSyncStatus('error'); }
+    );
+  }
+
+  async function saveData() {
+    if (!FIREBASE_READY) {
+      localStorage.setItem(LS_KEY, JSON.stringify(db));
+      return;
+    }
+    setSyncStatus('saving');
+    try {
+      await docRef().set({ db });
+      setSyncStatus('synced');
+    } catch (e) { console.error(e); setSyncStatus('error'); }
+  }
+
+  function loadLocalFallback() {
+    try { return JSON.parse(localStorage.getItem(LS_KEY)) || {}; }
+    catch { return {}; }
+  }
+
+  // ── Month helpers ──────────────────────────────────────────
+  const today    = new Date();
+  let curYear    = today.getFullYear();
+  let curMonth   = today.getMonth();
+
+  function monthKey(y, m) { return `${y}-${String(m+1).padStart(2,'0')}`; }
+  function dayKey(d)       { return String(d).padStart(2,'0'); }
+
+  function getMonthData(y, m) {
+    const k = monthKey(y, m);
+    if (!db[k]) db[k] = { target: 0, days: {} };
+    return db[k];
+  }
+
+  // ── Chart ──────────────────────────────────────────────────
+  const goalChart = new Chart(
+    document.getElementById('goalChart').getContext('2d'),
+    {
+      type: 'doughnut',
+      data: {
+        datasets: [{
+          data: [0, 100],
+          backgroundColor: ['#2563eb', '#1e2030'],
+          borderWidth: 0, hoverOffset: 0,
+        }]
+      },
+      options: {
+        cutout: '72%',
+        plugins: { legend: { display: false }, tooltip: { enabled: false } },
+        animation: { duration: 400 },
+        events: [],
+      }
+    }
+  );
+
+  function updateChart(pct) {
+    const c = Math.min(Math.max(pct, 0), 100);
+    const color = pct < 0 ? '#22c55e' : pct >= 100 ? '#f59e0b' : '#2563eb';
+    goalChart.data.datasets[0].data = [c, 100 - c];
+    goalChart.data.datasets[0].backgroundColor[0] = color;
+    goalChart.update();
+    const el = document.getElementById('chartPct');
+    el.textContent = Math.round(pct) + '%';
+    el.style.color = color;
+  }
+
+  // ── Stats ──────────────────────────────────────────────────
+  function fmt(n) {
+    return (n < 0 ? '-' : '') + '¥' + Math.abs(n).toLocaleString('ja-JP');
+  }
+
+  function updateStats() {
+    const md   = getMonthData(curYear, curMonth);
+    const days = Object.values(md.days || {});
+    const total = days.reduce((s, d) => s + (d.pnl || 0), 0);
+    const wins  = days.filter(d => d.pnl > 0).length;
+    const losses = days.filter(d => d.pnl < 0).length;
+    const pnls   = days.map(d => d.pnl || 0);
+    const best   = pnls.length ? Math.max(...pnls) : 0;
+    const worst  = pnls.length ? Math.min(...pnls) : 0;
+    const avg    = days.length ? Math.round(total / days.length) : 0;
+
+    const set = (id, val, cls) => {
+      const el = document.getElementById(id);
+      el.textContent = val;
+      if (cls) el.className = 's-val ' + cls;
+    };
+    set('totalPnl',  fmt(total),  total > 0 ? 'profit' : total < 0 ? 'loss' : 'neutral');
+    set('winLoss',   `${wins} / ${losses}`);
+    set('bestDay',   fmt(best),   'profit');
+    set('worstDay',  fmt(worst),  'loss');
+    set('tradeDays', days.length + '日');
+    set('avgPnl',    fmt(avg),    avg > 0 ? 'profit' : avg < 0 ? 'loss' : 'neutral');
+
+    const target = md.target || 0;
+    updateChart(target > 0 ? (total / target) * 100 : 0);
+  }
+
+  // ── Target input ───────────────────────────────────────────
+  const targetInput = document.getElementById('targetInput');
+  targetInput.addEventListener('change', async () => {
+    getMonthData(curYear, curMonth).target = Number(targetInput.value) || 0;
+    await saveData();
+    updateStats();
+  });
+
+  function loadTargetInput() {
+    targetInput.value = getMonthData(curYear, curMonth).target || '';
+  }
+
+  // ── Calendar ───────────────────────────────────────────────
+  function buildCalendar() {
+    document.getElementById('monthLabel').textContent =
+      `${curYear}年 ${curMonth + 1}月`;
+    const grid = document.getElementById('calGrid');
+    grid.innerHTML = '';
+    const md = getMonthData(curYear, curMonth);
+    const firstDay    = new Date(curYear, curMonth, 1).getDay();
+    const daysInMonth = new Date(curYear, curMonth + 1, 0).getDate();
+    const prevDays    = new Date(curYear, curMonth, 0).getDate();
+
+    for (let i = firstDay - 1; i >= 0; i--)
+      grid.appendChild(makeCell(prevDays - i, null, true));
+
+    for (let d = 1; d <= daysInMonth; d++) {
+      const entry = (md.days || {})[dayKey(d)] || null;
+      const isToday = curYear === today.getFullYear() &&
+                      curMonth === today.getMonth() && d === today.getDate();
+      const cell = makeCell(d, entry, false, isToday);
+      cell.addEventListener('click', () => openModal(d));
+      grid.appendChild(cell);
+    }
+
+    const total = firstDay + daysInMonth;
+    const rem   = total % 7 === 0 ? 0 : 7 - (total % 7);
+    for (let d = 1; d <= rem; d++)
+      grid.appendChild(makeCell(d, null, true));
+  }
+
+  function makeCell(d, entry, other, isToday) {
+    const cell = document.createElement('div');
+    cell.className = 'cal-cell' + (other ? ' other-month' : '') + (isToday ? ' today' : '');
+
+    const num = document.createElement('div');
+    num.className = 'day-num';
+    num.textContent = d;
+    cell.appendChild(num);
+
+    if (entry) {
+      if (entry.pnl != null) {
+        const el = document.createElement('div');
+        el.className = 'day-pnl ' + (entry.pnl > 0 ? 'profit' : entry.pnl < 0 ? 'loss' : 'neutral');
+        el.textContent = fmt(entry.pnl);
+        cell.appendChild(el);
+      }
+      if (entry.memo || entry.reflection) {
+        const dot = document.createElement('div');
+        dot.className = 'day-memo-dot';
+        cell.appendChild(dot);
+      }
+    }
+    return cell;
+  }
+
+  // ── Month nav ──────────────────────────────────────────────
+  document.getElementById('prevMonth').addEventListener('click', () => {
+    if (--curMonth < 0) { curMonth = 11; curYear--; }
+    refresh();
+  });
+  document.getElementById('nextMonth').addEventListener('click', () => {
+    if (++curMonth > 11) { curMonth = 0; curYear++; }
+    refresh();
+  });
+
+  function refresh() {
+    loadTargetInput();
+    buildCalendar();
+    updateStats();
+  }
+
+  // ── Trade modal ────────────────────────────────────────────
+  let activeDay = null;
+
+  function openModal(d) {
+    activeDay = d;
+    const entry = (getMonthData(curYear, curMonth).days || {})[dayKey(d)] || {};
+    document.getElementById('modalTitle').textContent =
+      `${curYear}年${curMonth + 1}月${d}日 のトレード記録`;
+    document.getElementById('pnlInput').value        = entry.pnl ?? '';
+    document.getElementById('memoInput').value       = entry.memo || '';
+    document.getElementById('reflectionInput').value = entry.reflection || '';
+    updatePnlPreview(entry.pnl);
+    document.getElementById('overlay').classList.add('open');
+    document.getElementById('pnlInput').focus();
+  }
+
+  function closeModal() {
+    document.getElementById('overlay').classList.remove('open');
+    activeDay = null;
+  }
+
+  function updatePnlPreview(v) {
+    const n  = Number(v);
+    const el = document.getElementById('pnlPreview');
+    if (v === '' || v == null || isNaN(n)) {
+      el.textContent = '¥0'; el.className = 'pnl-preview neutral';
+    } else {
+      el.textContent = fmt(n);
+      el.className = 'pnl-preview ' + (n > 0 ? 'profit' : n < 0 ? 'loss' : 'neutral');
+    }
+  }
+
+  document.getElementById('pnlInput').addEventListener('input', e => updatePnlPreview(e.target.value));
+
+  document.getElementById('saveBtn').addEventListener('click', async () => {
+    if (activeDay === null) return;
+    const md = getMonthData(curYear, curMonth);
+    if (!md.days) md.days = {};
+    const dk  = dayKey(activeDay);
+    const pnlRaw     = document.getElementById('pnlInput').value;
+    const pnl        = pnlRaw !== '' ? Number(pnlRaw) : null;
+    const memo       = document.getElementById('memoInput').value.trim();
+    const reflection = document.getElementById('reflectionInput').value.trim();
+    if (pnl === null && !memo && !reflection) {
+      delete md.days[dk];
+    } else {
+      md.days[dk] = { pnl, memo, reflection };
+    }
+    await saveData();
+    closeModal();
+    refresh();
+  });
+
+  document.getElementById('deleteBtn').addEventListener('click', async () => {
+    if (activeDay === null) return;
+    if (!confirm('この日の記録を削除しますか？')) return;
+    const md = getMonthData(curYear, curMonth);
+    if (md.days) delete md.days[dayKey(activeDay)];
+    await saveData();
+    closeModal();
+    refresh();
+  });
+
+  document.getElementById('cancelBtn').addEventListener('click', closeModal);
+  document.getElementById('modalClose').addEventListener('click', closeModal);
+  document.getElementById('overlay').addEventListener('click', e => {
+    if (e.target === document.getElementById('overlay')) closeModal();
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+      closeModal();
+      document.getElementById('syncOverlay').classList.remove('open');
+    }
+  });
+
+  // ── Sync key UI ────────────────────────────────────────────
+  function renderSyncKey() {
+    document.getElementById('syncKeyDisplay').textContent = syncKey;
+    document.getElementById('syncKeyBig').textContent     = syncKey;
+  }
+
+  function copyKey() {
+    navigator.clipboard.writeText(syncKey).then(() => {
+      const btn = document.getElementById('copyKeyBtn');
+      btn.textContent = '✅';
+      setTimeout(() => { btn.textContent = '📋'; }, 1500);
+    });
+  }
+
+  document.getElementById('copyKeyBtn').addEventListener('click', copyKey);
+  document.getElementById('copyKeyBtn2').addEventListener('click', () => {
+    navigator.clipboard.writeText(syncKey).then(() => {
+      document.getElementById('copyKeyBtn2').textContent = '✅ コピーしました';
+      setTimeout(() => { document.getElementById('copyKeyBtn2').textContent = '📋 キーをコピー'; }, 1500);
+    });
+  });
+
+  document.getElementById('changeKeyBtn').addEventListener('click', () => {
+    document.getElementById('newKeyInput').value = '';
+    document.getElementById('syncOverlay').classList.add('open');
+  });
+
+  document.getElementById('syncCancelBtn').addEventListener('click', () => {
+    document.getElementById('syncOverlay').classList.remove('open');
+  });
+  document.getElementById('syncModalClose').addEventListener('click', () => {
+    document.getElementById('syncOverlay').classList.remove('open');
+  });
+
+  document.getElementById('applySyncKey').addEventListener('click', () => {
+    const newKey = document.getElementById('newKeyInput').value.trim().toUpperCase();
+    if (!newKey || newKey.length < 4) { alert('4文字以上のキーを入力してください'); return; }
+    syncKey = newKey;
+    localStorage.setItem(KEY_STORAGE, syncKey);
+    db = {};
+    document.getElementById('syncOverlay').classList.remove('open');
+    renderSyncKey();
+    startSync();
+  });
+
+  // ── Init ───────────────────────────────────────────────────
+  renderSyncKey();
+  if (FIREBASE_READY) {
+    startSync();
+  } else {
+    db = loadLocalFallback();
+    setSyncStatus('local');
+    refresh();
+  }
+</script>
+</body>
+</html>
