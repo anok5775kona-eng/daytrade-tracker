@@ -283,9 +283,36 @@
     }
 
     @media (max-width: 600px) {
-      .stats-grid { grid-template-columns: repeat(2, 1fr); }
-      .summary-card { gap: 20px; padding: 16px; }
-      .chart-wrap { width: 130px; height: 130px; }
+      /* ヘッダー */
+      header { padding: 10px 12px; gap: 6px; }
+      header h1 { font-size: 0.95rem; }
+      .sync-area {
+        margin-left: 0;
+        width: 100%;
+        justify-content: space-between;
+      }
+      .sync-key-box { font-size: 0.72rem; padding: 4px 8px; }
+      .month-nav span { min-width: 90px; font-size: 0.85rem; }
+
+      /* サマリー */
+      .summary-card {
+        flex-direction: column;
+        align-items: center;
+        gap: 16px;
+        padding: 16px 12px;
+      }
+      .chart-wrap { width: 120px; height: 120px; }
+      .summary-info { min-width: 0; width: 100%; }
+      .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+      .stat-box { padding: 8px 10px; }
+      .stat-box .s-val { font-size: 0.88rem; }
+
+      /* カレンダー */
+      .cal-cell { min-height: 56px; padding: 4px 3px; }
+      .cal-header div { font-size: 0.68rem; padding: 6px 0; }
+      .day-num { font-size: 0.7rem; width: 20px; height: 20px; }
+      .day-pnl { font-size: 0.72rem; margin-top: 1px; }
+      .day-memo-dot { width: 4px; height: 4px; top: 4px; right: 4px; }
     }
   </style>
 </head>
@@ -549,6 +576,17 @@
     return (n < 0 ? '-' : '') + '¥' + Math.abs(n).toLocaleString('ja-JP');
   }
 
+  // カレンダーセル用の短縮表示（例: +1.2万 / -0.8万）
+  function fmtCompact(n) {
+    const sign = n > 0 ? '+' : n < 0 ? '-' : '';
+    const abs  = Math.abs(n);
+    if (abs >= 10000) {
+      const man = (abs / 10000).toFixed(abs % 10000 === 0 ? 0 : 1);
+      return sign + man + '万';
+    }
+    return sign + '¥' + abs.toLocaleString('ja-JP');
+  }
+
   function updateStats() {
     const md   = getMonthData(curYear, curMonth);
     const days = Object.values(md.days || {});
@@ -630,7 +668,7 @@
       if (entry.pnl != null) {
         const el = document.createElement('div');
         el.className = 'day-pnl ' + (entry.pnl > 0 ? 'profit' : entry.pnl < 0 ? 'loss' : 'neutral');
-        el.textContent = fmt(entry.pnl);
+        el.textContent = fmtCompact(entry.pnl);
         cell.appendChild(el);
       }
       if (entry.memo || entry.reflection) {
@@ -790,3 +828,4 @@
 </script>
 </body>
 </html>
+
